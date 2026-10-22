@@ -48,6 +48,7 @@ export function BookForm({ book }: { book?: Book }) {
     formState: { errors, isSubmitting },
   } = useForm<BookValues>({
     resolver: zodResolver(bookSchema),
+    mode: 'onChange',
     defaultValues: book
       ? {
           title: book.title,

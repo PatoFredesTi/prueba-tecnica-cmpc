@@ -17,6 +17,7 @@ erDiagram
   datetime createdAt
  }
  AUTH_SESSION {
+  uuid id UK
   string tokenHash PK
   uuid userId FK
   datetime expiresAt
@@ -71,3 +72,5 @@ No existe unicidad por título: pueden coexistir ediciones o libros homónimos. 
 El seed usa IDs fijos para 24 libros de demostración. Un segundo seed no sobrescribe ediciones ni vuelve a mostrar libros retirados. La cuenta se crea si no existe; su contraseña no se resetea en cada arranque.
 
 `AuthSession` se incorpora en la migración `202610220002_auth_sessions`: hash SHA-256 como clave, FK al usuario con borrado en cascada e índices por usuario y vencimiento. No almacena el secreto en claro.
+
+La migración `202610220003_session_id` agrega un UUID único a cada sesión. Ese identificador se incorpora como `sid` en JWT para revocación; el hash del secreto de recuperación no se expone como identificador del token.

@@ -1,4 +1,12 @@
-import { api, ApiError, setSession, validateImage, uploadImage, exportBooks } from './api';
+import {
+  fetchCover,
+  api,
+  ApiError,
+  setSession,
+  validateImage,
+  uploadImage,
+  exportBooks,
+} from './api';
 afterEach(() => {
   setSession(null);
   vi.unstubAllGlobals();
@@ -79,4 +87,14 @@ describe('Cliente HTTP', () => {
     Object.defineProperty(file, 'size', { value: 6 * 1024 * 1024 });
     expect(validateImage(file)).toContain('5 MB');
   });
+});
+
+it('no envía credenciales a URLs de portada externas ni a rutas manipuladas', async () => {
+  const fetcher = vi.fn();
+  vi.stubGlobal('fetch', fetcher);
+  for (const url of ['https://evil.invalid/cover.webp', '/uploads/../../.env', '/uploads/a.svg'])
+    await expect(fetchCover(url, new AbortController().signal)).rejects.toMatchObject({
+      status: 400,
+    });
+  expect(fetcher).not.toHaveBeenCalled();
 });

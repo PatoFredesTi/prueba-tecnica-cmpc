@@ -7,6 +7,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { setup } from './setup';
+import { securityConfig } from './security/config';
 config({ path: resolve(process.cwd(), '../../.env') });
 config();
 async function bootstrap() {
@@ -15,21 +16,19 @@ async function bootstrap() {
   });
   setup(app);
   app.enableShutdownHooks();
-  app.useStaticAssets(resolve(process.env.UPLOAD_DIR || './uploads'), {
-    prefix: '/uploads/',
-    index: false,
-    dotfiles: 'deny',
-  });
-  const document = SwaggerModule.createDocument(
-    app,
-    new DocumentBuilder()
-      .setTitle('CMPC Libros API')
-      .setDescription('Inventario y catálogo interno de libros')
-      .setVersion('1.0')
-      .addBearerAuth()
-      .build(),
-  );
-  SwaggerModule.setup('api/docs', app, document);
-  await app.listen(Number(process.env.PORT) || 3000, '0.0.0.0');
+  const security = securityConfig();
+  if (security.swagger) {
+    const document = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder()
+        .setTitle('CMPC Libros API')
+        .setDescription('Inventario y catálogo interno de libros')
+        .setVersion('1.0')
+        .addBearerAuth()
+        .build(),
+    );
+    SwaggerModule.setup('api/docs', app, document);
+  }
+  await app.listen(Number(process.env.PORT) || 3000, process.env.HOST || '127.0.0.1');
 }
 void bootstrap();

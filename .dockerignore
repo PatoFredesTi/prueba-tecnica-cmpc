@@ -3,5 +3,9 @@ node_modules
 **/dist
 **/coverage
 .git
-.env
-uploads
+**/.env
+**/.env.*
+!**/.env.example
+**/uploads
+test-results
+playwright-report

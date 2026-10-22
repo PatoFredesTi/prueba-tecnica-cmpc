@@ -85,7 +85,7 @@ async function renderPage(node: React.ReactNode, path = '/books', signed = true)
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  await waitFor(() => expect(screen.queryByText('Recuperando sesión…')).not.toBeInTheDocument());
+  await screen.findByTestId('location');
   return view;
 }
 const routes = (
@@ -412,9 +412,22 @@ describe('Detalle', () => {
     await renderPage(routes, '/books/missing');
     expect(await screen.findByRole('alert')).toHaveTextContent('Libro no encontrado');
   });
-  it('renderiza portadas cargadas con texto alternativo', () => {
-    render(<Cover book={{ ...book, imageUrl: '/uploads/cover.webp' }} />);
-    expect(screen.getByRole('img')).toHaveAttribute('src', '/uploads/cover.webp');
+  it('renderiza portadas privadas como blob con texto alternativo y libera el recurso', async () => {
+    const create = vi.fn().mockReturnValue('blob:private-cover');
+    const revoke = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: create });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revoke });
+    const url = '/uploads/00000000-0000-4000-8000-000000000001.webp';
+    setSession('jwt');
+    const view = render(<Cover book={{ ...book, imageUrl: url }} />);
+    expect(await screen.findByRole('img')).toHaveAttribute('src', 'blob:private-cover');
+    expect(mock).toHaveBeenCalledWith(
+      '/api/v1/files/00000000-0000-4000-8000-000000000001.webp',
+      expect.objectContaining({ credentials: 'same-origin' }),
+    );
+    expect(mock.mock.calls.at(-1)![1]!.headers).toBeInstanceOf(Headers);
+    view.unmount();
+    expect(revoke).toHaveBeenCalledWith('blob:private-cover');
   });
 });
 it('filtros admiten un catálogo todavía no cargado', () => {

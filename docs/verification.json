@@ -1,36 +1,36 @@
 {
   "date": "2026-10-22",
   "unitTests": {
-    "api": 66,
-    "web": 41
+    "api": 84,
+    "web": 42
   },
-  "integrationTests": 13,
-  "browserTests": 2,
+  "integrationTests": 16,
+  "browserTests": 3,
   "coverage": {
     "api": {
       "lines": {
-        "total": 319,
-        "covered": 307,
+        "total": 378,
+        "covered": 359,
         "skipped": 0,
-        "pct": 96.23
+        "pct": 94.97
       },
       "statements": {
-        "total": 362,
-        "covered": 349,
+        "total": 425,
+        "covered": 405,
         "skipped": 0,
-        "pct": 96.4
+        "pct": 95.29
       },
       "functions": {
-        "total": 69,
-        "covered": 67,
+        "total": 78,
+        "covered": 75,
         "skipped": 0,
-        "pct": 97.1
+        "pct": 96.15
       },
       "branches": {
-        "total": 119,
-        "covered": 111,
+        "total": 171,
+        "covered": 163,
         "skipped": 0,
-        "pct": 93.27
+        "pct": 95.32
       },
       "branchesTrue": {
         "total": 0,
@@ -41,28 +41,28 @@
     },
     "web": {
       "lines": {
-        "total": 267,
-        "covered": 260,
+        "total": 282,
+        "covered": 275,
         "skipped": 0,
-        "pct": 97.37
+        "pct": 97.51
       },
       "statements": {
-        "total": 300,
-        "covered": 287,
+        "total": 319,
+        "covered": 305,
         "skipped": 0,
-        "pct": 95.66
+        "pct": 95.61
       },
       "functions": {
-        "total": 103,
-        "covered": 97,
+        "total": 108,
+        "covered": 101,
         "skipped": 0,
-        "pct": 94.17
+        "pct": 93.51
       },
       "branches": {
-        "total": 266,
-        "covered": 244,
+        "total": 276,
+        "covered": 252,
         "skipped": 0,
-        "pct": 91.72
+        "pct": 91.3
       },
       "branchesTrue": {
         "total": 0,
@@ -94,5 +94,18 @@
     "dockerOrigin": "http://localhost:8080",
     "result": "passed",
     "cases": ["reload retains session and filters", "multiple tabs", "logout prevents restoration"]
+  },
+  "securityChecks": {
+    "oldJwtKeyRejected": true,
+    "oldAdminPasswordRejected": true,
+    "oldDatabasePasswordRejected": true,
+    "jwtRejectedAfterLogout": true,
+    "privateBookImages": true,
+    "rateLimit429": true,
+    "frontendCsp": true,
+    "productionSwaggerDisabled": true,
+    "freshSecretGenerationAndIdempotency": true,
+    "secretsFoundInTrackedFilesOrServedAssets": false,
+    "publicTlsDeploymentVerified": false
   }
 }

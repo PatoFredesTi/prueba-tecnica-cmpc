@@ -6,11 +6,11 @@ React + TypeScript · NestJS + TypeScript · PostgreSQL 16 · Prisma 6.
 
 ## Inicio con Docker
 
-Requisitos: Docker Desktop o Docker Engine con Compose v2+, puertos **8080** y **55439** disponibles. No necesitas Node instalado para ejecutar los contenedores.
+Requisitos: Docker Desktop o Docker Engine con Compose v2+, puertos **8080** y **55439** disponibles. No necesitas Node instalado para ejecutar los contenedores. Para generar `.env` sin Node local, usa `docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/workspace" -w /workspace node:22-bookworm-slim node scripts/setup-env.mjs` en lugar de `npm run setup:env`.
 
 ```sh
 # Desde el directorio del repositorio
-cp .env.example .env
+npm run setup:env
 docker compose up --build
 ```
 
@@ -21,14 +21,9 @@ En una primera ejecución, la API espera a PostgreSQL, aplica las migraciones y 
 - OpenAPI JSON: http://localhost:8080/api/docs-json
 - Salud API y BD: http://localhost:8080/api/v1/health
 
-La cuenta se configura con `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD`. Con el archivo de ejemplo:
+La cuenta se configura con `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD`. `npm run setup:env` genera claves aleatorias independientes para JWT, PostgreSQL y administrador. El correo inicial es `admin@cmpc.local`; consulta la contraseña en tu archivo `.env`. El generador no sobrescribe un `.env` existente y no imprime secretos.
 
-| Campo      | Valor de demostración |
-| ---------- | --------------------- |
-| Correo     | `admin@cmpc.local`    |
-| Contraseña | `DemoCMPC2026!`       |
-
-Son valores exclusivamente locales. `.env` está ignorado por Git. El seed no cambia contraseñas existentes, no duplica libros y no restaura registros eliminados. Incluye 24 títulos con precios y disponibilidad ficticios; las portadas iniciales son composiciones tipográficas, no fotografías de las ediciones.
+`.env` está ignorado por Git y excluido de Docker junto con sus variantes. El seed no cambia contraseñas existentes, no duplica libros y no restaura registros eliminados. Incluye 24 títulos con precios y disponibilidad ficticios; las portadas iniciales son composiciones tipográficas.
 
 ```sh
 docker compose up -d                 # Segundo plano
@@ -43,7 +38,7 @@ Los volúmenes `postgres_data` y `book_uploads` sobreviven a reinicios y a `down
 Requisitos: Node.js 22.12+ (se recomienda la versión LTS 22), npm y PostgreSQL. Puedes usar solo el servicio `db` de Compose.
 
 ```sh
-cp .env.example .env
+npm run setup:env
 npm ci
 npm run db:generate
 docker compose up -d db
@@ -99,7 +94,7 @@ Si tienes Google Chrome instalado, puedes usar `PLAYWRIGHT_CHANNEL=chrome npm ru
 
 ## Funcionalidades implementadas
 
-- Autenticación JWT con expiración, emisor y audiencia; contraseñas bcrypt; guard global con excepciones explícitas para login, refresh, logout y health.
+- Autenticación JWT con expiración, emisor y audiencia; contraseñas bcrypt; guard global con excepciones explícitas para login, refresh, logout y health. Los JWT incluyen una sesión activa comprobada en PostgreSQL; logout revoca su acceso inmediatamente en las solicitudes posteriores.
 - CRUD real contra PostgreSQL, detalle, baja lógica, catálogos normalizados y auditoría en transacciones.
 - Búsqueda insensible a mayúsculas, cuatro filtros AND, orden múltiple permitido y paginación en servidor.
 - Formularios con React Hook Form + Zod, validación adicional en DTO, errores y estados de carga/vacío/reintento.
@@ -115,11 +110,14 @@ La disponibilidad es booleana, no una cantidad. Cada libro tiene un autor princi
 
 No hay registro público, préstamos, reservas, ventas ni permisos granulares. La gestión de usuarios está limitada al seed y autenticación; no se introduce un módulo HTTP de usuarios sin casos de uso.
 
-Al cerrar sesión se revoca la sesión persistente en PostgreSQL y se elimina su cookie. El JWT de acceso se descarta, pero un token de acceso copiado continúa siendo válido hasta expirar: no hay lista de revocación de JWT. Las imágenes son públicas por URL aleatoria bajo `/uploads`; el catálogo y sus datos requieren JWT. Los archivos de libros retirados se conservan para no perder el historial asociado.
+Al cerrar sesión se revoca la sesión en PostgreSQL y se elimina su cookie: el JWT asociado deja de autorizar solicitudes posteriores. Las portadas se sirven por `/api/v1/files/:filename` con Bearer, solo si pertenecen a un libro activo. El frontend las descarga como blobs sin poner tokens en URLs. Las rutas antiguas `/uploads` están cerradas; las referencias antiguas se resuelven por la nueva ruta protegida. Los archivos de libros retirados se conservan físicamente para el historial, pero no se entregan desde la API.
+
+El login admite 10 intentos por minuto e IP; refresh 60 y logout 30, con respuesta 429 y Retry-After. El almacenamiento del limitador es local al proceso. Docker confía únicamente en un salto de proxy y Nginx sobrescribe X-Forwarded-For; en desarrollo no se confía en cabeceras de proxy.
 
 ## Límites y pendientes para producción
 
-- No se incluyen HTTPS/certificados, limitación de intentos de login, revocación inmediata de JWT de acceso, backups ni rotación automática de secretos. Son adecuaciones productivas explícitas del BRD.
+- No se incluyen certificados ni un dominio público. `APP_ENV=production` exige orígenes HTTPS, cookie Secure y contraseñas propias; deshabilita Swagger. El TLS debe terminar en un proxy de despliegue configurado por el operador. Faltan backups automatizados y rotación programada de secretos.
+- Para múltiples réplicas, el limitador de autenticación requiere almacenamiento compartido (por ejemplo Redis); reiniciar el proceso reinicia sus contadores.
 - El CSV utiliza lotes con `OFFSET`; una edición concurrente durante una exportación larga puede mover filas entre lotes. Para una exportación contablemente consistente se requiere snapshot/cursor dedicado.
 - La auditoría no tiene endpoints de modificación; un administrador de la base conserva capacidad de modificar tablas. No se presenta como almacenamiento WORM.
 - La carga de archivos y SQL no forman una transacción distribuida. Se compensa el fallo de SQL; un corte abrupto del proceso puede dejar un archivo huérfano. Falta limpieza programada y proveedor de objetos para múltiples réplicas.
@@ -140,6 +138,16 @@ La fecha límite de la prueba requiere confirmación con BYC: el BRD advierte la
 
 ### Sesión al recargar
 
-El JWT de acceso sigue en memoria. Al iniciar la aplicación, `POST /api/v1/auth/refresh` recupera usuario y un nuevo JWT usando la cookie `cmpc_session` (HttpOnly, SameSite=Strict). La sesión dura 7 días desde el login, sin extenderse con cada recarga. PostgreSQL guarda únicamente el hash del secreto. No se guardan tokens en localStorage ni sessionStorage. Se necesita iniciar sesión una vez después de actualizar desde la versión anterior.
+El JWT de acceso sigue en memoria y contiene el identificador de su sesión. Al iniciar la aplicación, `POST /api/v1/auth/refresh` recupera usuario y un nuevo JWT usando la cookie `cmpc_session` (HttpOnly, SameSite=Strict). La sesión dura 7 días desde el login, sin extenderse con cada recarga. PostgreSQL guarda únicamente el hash del secreto. No se guardan tokens en localStorage ni sessionStorage. Se necesita iniciar sesión una vez después de actualizar desde la versión anterior.
 
 La migración `202610220002_auth_sessions` se aplica con `npm run db:migrate` en desarrollo y automáticamente al iniciar Docker. Usa `SESSION_COOKIE_SECURE=false` para HTTP local y `true` al desplegar con HTTPS. Las peticiones de autenticación requieren `X-Session-Request: 1`; el cliente web y Swagger ya la contemplan. Frontend y API comparten origen mediante el proxy de Vite/Nginx.
+
+### Endurecimiento y rotación local
+
+`npm run security:rotate-local` rota JWT, la contraseña del administrador existente y la del rol PostgreSQL de la base local, y revoca todas las sesiones. Es una operación explícita de mantenimiento; genera los valores sin mostrarlos y actualiza `.env`. Después ejecuta `docker compose up -d --build` para recrear los contenedores con la configuración nueva. Cambiar únicamente el `.env` no modifica contraseñas ya persistidas en la base.
+
+La rotación guarda previamente `.env.rotation-pending` con permisos privados. Si falla, conserva ese archivo y `.env` para revisar qué transacción se confirmó; el comando no los sobreescribe a ciegas. No uses este comando para una base remota o producción.
+
+`APP_ENV=local` es el modo de evaluación, incluso dentro del contenedor con `NODE_ENV=production`. `SWAGGER_ENABLED=false` permite ocultar Swagger también localmente. En producción está deshabilitado independientemente de esa variable. `HOST=127.0.0.1` es el valor predeterminado fuera de Docker; Compose utiliza la interfaz interna del contenedor sin publicar el puerto API.
+
+Nginx agrega CSP, X-Frame-Options y Permissions-Policy al frontend, oculta su versión y rechaza rutas ocultas. Las respuestas API llevan Cache-Control: no-store. Consulta [la revisión de seguridad](docs/security-review.md) para evidencia y límites restantes.

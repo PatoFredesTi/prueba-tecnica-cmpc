@@ -2,7 +2,7 @@
 
 Prefijo `/api/v1`. Swagger en `/api/docs`, OpenAPI en `/api/docs-json`.
 
-Todas las rutas salvo login, refresh, logout y health requieren `Authorization: Bearer <accessToken>`. Swagger y las imágenes son públicos en esta configuración local.
+Todas las rutas salvo login, refresh, logout y health requieren `Authorization: Bearer <accessToken>`. Swagger es público solamente en modo local si está habilitado. Las imágenes requieren Bearer y sesión activa.
 
 | Método | Ruta                   | Uso                                     |
 | ------ | ---------------------- | --------------------------------------- |
@@ -21,7 +21,7 @@ Todas las rutas salvo login, refresh, logout y health requieren `Authorization: 
 | GET    | `/catalogs/genres`     | Géneros ordenados                       |
 | GET    | `/health`              | Estado de API y conectividad PostgreSQL |
 
-Autenticación: los tres POST `/auth/login`, `/auth/refresh` y `/auth/logout` requieren `X-Session-Request: 1` (403 si falta). Login recibe credenciales y entrega `{ data: { accessToken, user }, meta }`; también establece `cmpc_session` en cookie HttpOnly/SameSite=Strict, limitada a `/api/v1/auth`, con vencimiento a los 7 días. Refresh no recibe cuerpo: valida la cookie y entrega el mismo formato con un nuevo JWT, sin ampliar la duración de la sesión. Cookie ausente, inválida, revocada o vencida produce 401. Logout no requiere un JWT vigente: revoca la cookie presentada y la elimina; es idempotente y devuelve `{ data: { loggedOut: true }, meta }`. Las respuestas de autenticación llevan `Cache-Control: no-store`. El secreto persistente nunca aparece en el JSON.
+Autenticación: los tres POST `/auth/login`, `/auth/refresh` y `/auth/logout` requieren `X-Session-Request: 1` (403 si falta). Login recibe credenciales y entrega `{ data: { accessToken, user }, meta }`; también establece `cmpc_session` en cookie HttpOnly/SameSite=Strict, limitada a `/api/v1/auth`, con vencimiento a los 7 días. Refresh no recibe cuerpo: valida la cookie y entrega el mismo formato con un nuevo JWT, sin ampliar la duración de la sesión. Cookie ausente, inválida, revocada o vencida produce 401. Logout no requiere un JWT vigente: revoca la cookie presentada y la elimina; es idempotente y devuelve `{ data: { loggedOut: true }, meta }`. Las respuestas de autenticación llevan `Cache-Control: no-store`. El secreto persistente nunca aparece en el JSON. Cada JWT incluye `sid`; después de logout, reutilizarlo obtiene 401. Login permite 10 solicitudes/minuto/IP, refresh 60 y logout 30; al superar el límite responde 429 con Retry-After.
 
 Crear libro:
 
@@ -68,3 +68,7 @@ Otros éxitos JSON: `{ "data": resultado, "meta": { "requestId": "uuid" } }`. Lo
 ```
 
 Errores de validación incluyen mensajes de class-validator; los campos de catálogo/formulario están identificados en esos mensajes. `requestId` también aparece en `X-Request-Id`. Los errores inesperados no devuelven stack ni detalles de PostgreSQL. CSV usa UTF-8, BOM y CRLF. Una imagen inválida produce 400 y un archivo superior al límite 413.
+
+Portadas: `GET /api/v1/files/:filename` requiere Bearer y devuelve WebP con `Cache-Control: private, no-store`. Sin autenticación: 401. Nombre inválido, archivo ausente o libro eliminado: 404. No hay acceso estático a `/uploads`; el frontend transforma referencias antiguas al endpoint protegido y no agrega tokens a query strings.
+
+Todas las respuestas API usan `Cache-Control: no-store`. Un JWT válido debe corresponder a una sesión vigente y a su usuario; firma válida por sí sola no autoriza. Swagger y OpenAPI no se montan con `APP_ENV=production`.

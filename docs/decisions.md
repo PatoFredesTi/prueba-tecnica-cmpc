@@ -10,7 +10,7 @@ Esquema declarativo y cliente tipado para avanzar sin perder integridad referenc
 
 ## ADR-03 — JWT en memoria y recuperación con cookie HttpOnly
 
-JWT de duración configurable, bcrypt con coste 12, guard global. Se verifica firma, expiración, emisor y audiencia. La SPA no guarda tokens en localStorage ni sessionStorage. La decisión original de perder la sesión al refrescar se reemplazó a petición del usuario: un secreto aleatorio de 256 bits en cookie HttpOnly/SameSite=Strict permite obtener un nuevo JWT al iniciar la SPA. Su hash SHA-256 se almacena en AuthSession; caduca a los 7 días del login y se revoca al cerrar sesión. La duración es absoluta, sin renovación deslizante ni rotación en cada refresh, para permitir recargas concurrentes y múltiples pestañas. El login reemplaza la sesión previa del mismo navegador dentro de una transacción. Login elimina sesiones vencidas del usuario. Las rutas de autenticación exigen una cabecera no simple contra CSRF y responden con Cache-Control: no-store. La SPA usa el mismo origen vía proxy; Secure se activa por configuración en HTTPS. Si falla la red al recuperar o cerrar sesión, se informa el error y se permite reintentar. Esto no añade revocación de JWT de acceso ya emitidos.
+JWT de duración configurable, bcrypt con coste 12, guard global. Se verifica firma, expiración, emisor y audiencia. La SPA no guarda tokens en localStorage ni sessionStorage. La decisión original de perder la sesión al refrescar se reemplazó a petición del usuario: un secreto aleatorio de 256 bits en cookie HttpOnly/SameSite=Strict permite obtener un nuevo JWT al iniciar la SPA. Su hash SHA-256 se almacena en AuthSession; caduca a los 7 días del login y se revoca al cerrar sesión. La duración es absoluta, sin renovación deslizante ni rotación en cada refresh, para permitir recargas concurrentes y múltiples pestañas. El login reemplaza la sesión previa del mismo navegador dentro de una transacción. Login elimina sesiones vencidas del usuario. Las rutas de autenticación exigen una cabecera no simple contra CSRF y responden con Cache-Control: no-store. La SPA usa el mismo origen vía proxy; Secure se activa por configuración en HTTPS. Si falla la red al recuperar o cerrar sesión, se informa el error y se permite reintentar. Cada JWT incorpora `sid`, un identificador UUID distinto del secreto de recuperación. El guard verifica HS256, emisor, audiencia, firma, expiración y una sesión activa asociada al usuario. Logout elimina esa sesión y revoca todos sus JWT para solicitudes posteriores. La API requiere disponibilidad de PostgreSQL para autorizar; una caída produce error, nunca acceso.
 
 ## ADR-04 — Auditoría y bajas lógicas
 
@@ -22,7 +22,7 @@ Entrada y salida como string decimal y almacenamiento `Decimal(12,2)`. El servid
 
 ## ADR-06 — Archivo local intercambiable
 
-`ImageStoragePort` permite adaptar S3 en el futuro. El adaptador actual decodifica con Sharp, rechaza contenido inválido, elimina metadata al convertir a WebP, limita píxeles y asigna un nombre UUID. No confía en extensión ni nombre original. Los archivos tienen URLs públicas aleatorias, documentado como supuesto local.
+`ImageStoragePort` permite adaptar S3 en el futuro. El adaptador actual decodifica con Sharp, rechaza contenido inválido, elimina metadata al convertir a WebP, limita píxeles y asigna un nombre UUID. No confía en extensión ni nombre original. Los archivos se sirven mediante un controlador autenticado, solamente para libros activos. El frontend obtiene un blob con Bearer y libera su URL al desmontarse. La ruta estática pública fue retirada.
 
 ## ADR-07 — CSV en lotes
 
@@ -39,3 +39,7 @@ La aplicación se ejecuta con Docker Compose y no depende de servicios de hostin
 ## ADR-10 — Dependencias y compilación
 
 Lockfile versionado para `npm ci`, Node 22 en Docker. Las versiones mayores de herramientas se conservan deliberadamente. Los overrides de `deepmerge-ts` y `js-yaml` tienen como propósito evitar avisos conocidos en dependencias transitivas; su efecto y el resultado de `npm audit` deben comprobarse en el lockfile y en `docs/testing.md`, no suponerse. La compilación de Nest usa `tsc` para conservar metadatos de decoradores.
+
+## ADR-11 — Secretos, límites y perfil de despliegue
+
+Los secretos del ejemplo se reemplazaron por generación criptográfica local; el arranque rechaza claves JWT publicadas o que no cumplan el formato aleatorio requerido. La rotación de una instalación existente cambia las credenciales persistidas, no solo variables de entorno. `APP_ENV` distingue evaluación local y despliegue público; producción exige configuración HTTPS/cookies Secure y deshabilita Swagger. NestJS Throttler limita login/refresh/logout por IP con contadores locales, adecuados a la única instancia del Compose. Antes de replicar, se requiere un almacén compartido. Nginx sobrescribe la cabecera del cliente y el backend confía en un único proxy dentro de Docker; el desarrollo directo no confía en proxy.

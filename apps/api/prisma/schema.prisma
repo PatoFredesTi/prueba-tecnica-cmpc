@@ -68,6 +68,7 @@ model AuditLog {
 }
 
 model AuthSession {
+ id String @unique @default(uuid()) @db.Uuid
  tokenHash String @id @db.Char(64)
  userId String @db.Uuid
  user User @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -1,6 +1,6 @@
 # Arquitectura
 
-Monorepo npm con `apps/web` y `apps/api`. El navegador solo conoce el origen del frontend; Nginx envía `/api` y `/uploads` a NestJS. No hay servicios externos obligatorios.
+Monorepo npm con `apps/web` y `apps/api`. El navegador solo conoce el origen del frontend; Nginx envía `/api` a NestJS; bloquea `/uploads` y rutas ocultas. No hay servicios externos obligatorios.
 
 ```mermaid
 flowchart LR
@@ -23,7 +23,7 @@ flowchart LR
 
 ## Backend
 
-- `AuthModule`: validación de credenciales, JWT, guard global. Solo login, refresh, logout y health se declaran públicos por metadata. Swagger y archivos estáticos se sirven fuera del guard HTTP.
+- `AuthModule`: validación de credenciales, JWT, guard global. Solo login, refresh, logout y health se declaran públicos por metadata. Swagger se sirve fuera del guard solo en modo local; las portadas pasan por el guard y se vinculan a libros activos.
 - `BooksModule`: controlador REST, DTO, filtros/orden tipados, CRUD, CSV y coordinación de imágenes. `BooksService` usa Prisma directamente para evitar un repositorio que solamente delegue.
 - `CatalogsModule`: consulta ordenada de autores, editoriales y géneros. Los nuevos valores se crean dentro de las transacciones del libro.
 - `FilesModule`: puerto abstracto `ImageStoragePort` y adaptador local. Valida MIME, tamaño y decodificación real antes de almacenar.
@@ -34,7 +34,7 @@ flowchart LR
 
 ## Frontend
 
-React Router protege las pantallas. `AuthProvider` recupera la sesión al iniciar mediante una cookie HttpOnly validada contra PostgreSQL y conserva usuario y token de acceso en memoria; el cliente HTTP adjunta Bearer y cierra la sesión ante 401. TanStack Query administra datos remotos e invalidaciones. La URL conserva búsqueda, filtros, orden y página; un hook retrasa únicamente las consultas de texto 350 ms. React Hook Form + Zod gestiona validación de formularios. Tailwind 4 y CSS propio componen el diseño.
+React Router protege las pantallas. Cada JWT referencia una sesión en PostgreSQL; el guard consulta su vigencia para revocar accesos tras logout. `AuthProvider` recupera la sesión al iniciar mediante una cookie HttpOnly validada contra PostgreSQL y conserva usuario y token de acceso en memoria; el cliente HTTP adjunta Bearer y cierra la sesión ante 401. TanStack Query administra datos remotos e invalidaciones. La URL conserva búsqueda, filtros, orden y página; un hook retrasa únicamente las consultas de texto 350 ms. React Hook Form + Zod gestiona validación de formularios. Tailwind 4 y CSS propio componen el diseño.
 
 ## Consistencia
 

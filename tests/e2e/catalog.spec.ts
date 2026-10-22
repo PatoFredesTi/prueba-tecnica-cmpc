@@ -7,6 +7,12 @@ test('flujo completo: login, búsqueda, filtros, CRUD, portada, CSV y logout', a
   if (!email || !password)
     throw new Error('Configura SEED_ADMIN_EMAIL y SEED_ADMIN_PASSWORD para E2E');
   const browserErrors: string[] = [];
+  await page.addInitScript(() => {
+    (window as any).__cspViolations = [];
+    document.addEventListener('securitypolicyviolation', (event) =>
+      (window as any).__cspViolations.push(event.violatedDirective),
+    );
+  });
   page.on('pageerror', (error) => browserErrors.push(error.message));
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('/');
@@ -57,6 +63,16 @@ test('flujo completo: login, búsqueda, filtros, CRUD, portada, CSV y logout', a
   await expect(page.getByRole('heading', { name: title })).toBeVisible();
   const detailUrl = page.url();
   await expect(page.getByRole('img', { name: `Portada de ${title}` })).toBeVisible();
+  await expect
+    .poll(() =>
+      page
+        .getByRole('img', { name: `Portada de ${title}` })
+        .evaluate((img: HTMLImageElement) => img.naturalWidth),
+    )
+    .toBeGreaterThan(0);
+  const id = new URL(detailUrl).pathname.split('/').pop();
+  const unauthenticated = await page.request.get('/api/v1/books/' + id);
+  expect(unauthenticated.status()).toBe(401);
   await page.getByRole('link', { name: 'Editar libro', exact: true }).click();
   await page.getByLabel('Precio (CLP) *').fill('15000');
   await page.getByLabel('Disponible en catálogo').uncheck();
@@ -88,4 +104,5 @@ test('flujo completo: login, búsqueda, filtros, CRUD, portada, CSV y logout', a
   await page.getByRole('button', { name: 'Cerrar sesión' }).click();
   await expect(page.getByRole('heading', { name: 'Qué bueno verte.' })).toBeVisible();
   expect(browserErrors).toEqual([]);
+  expect(await page.evaluate(() => (window as any).__cspViolations)).toEqual([]);
 });

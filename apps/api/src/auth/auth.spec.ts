@@ -47,6 +47,7 @@ describe('AuthService', () => {
     );
     expect(db.authSession.create).toHaveBeenLastCalledWith({
       data: {
+        id: expect.any(String),
         tokenHash: createHash('sha256').update(result.refreshToken).digest('hex'),
         userId: 'u',
         expiresAt: result.expiresAt,
@@ -180,6 +181,8 @@ describe('Cookies de sesión', () => {
   });
 });
 describe('JwtGuard', () => {
+  const userId = '00000000-0000-4000-8000-000000000001',
+    sid = '00000000-0000-4000-8000-000000000002';
   const ctx = (authorization?: string) => {
     const req: any = { headers: { authorization } };
     return {
@@ -192,12 +195,20 @@ describe('JwtGuard', () => {
     };
   };
   it('permite endpoints públicos', async () => {
-    const guard = new JwtGuard({ getAllAndOverride: () => true } as any, {} as any);
+    const guard = new JwtGuard({ getAllAndOverride: () => true } as any, {} as any, {} as any);
     expect(await guard.canActivate(ctx().context)).toBe(true);
   });
   it('rechaza anónimos, tokens inválidos y expirados', async () => {
     const jwt = new JwtService({ secret: 'test-secret' }),
-      guard = new JwtGuard({ getAllAndOverride: () => false } as any, jwt);
+      guard = new JwtGuard({ getAllAndOverride: () => false } as any, jwt, {
+        authSession: {
+          findUnique: jest.fn().mockResolvedValue({
+            userId: userId,
+            expiresAt: new Date(Date.now() + 60000),
+            user: { id: userId, email: 'a@b.cl' },
+          }),
+        },
+      } as any);
     await expect(guard.canActivate(ctx().context)).rejects.toThrow();
     await expect(guard.canActivate(ctx('Bearer bad').context)).rejects.toThrow();
     const expired = jwt.sign({ sub: 'user' }, { expiresIn: -1 });
@@ -205,11 +216,49 @@ describe('JwtGuard', () => {
     const noSubject = jwt.sign({ email: 'a' });
     await expect(guard.canActivate(ctx(`Bearer ${noSubject}`).context)).rejects.toThrow();
   });
+  it('rechaza sesiones revocadas, vencidas y pertenecientes a otro usuario', async () => {
+    const jwt = new JwtService({ secret: 'test-secret' });
+    const db = { authSession: { findUnique: jest.fn() } };
+    const guard = new JwtGuard({ getAllAndOverride: () => false } as any, jwt, db as any);
+    for (const session of [
+      null,
+      { userId, expiresAt: new Date(0) },
+      { userId: 'another', expiresAt: new Date(Date.now() + 60000) },
+    ]) {
+      db.authSession.findUnique.mockResolvedValueOnce(session);
+      await expect(
+        guard.canActivate(ctx(`Bearer ${jwt.sign({ sub: userId, sid })}`).context),
+      ).rejects.toThrow('Tu sesión expiró');
+    }
+    await expect(
+      guard.canActivate(ctx(`Bearer ${jwt.sign({ sub: userId })}`).context),
+    ).rejects.toThrow();
+    await expect(
+      guard.canActivate(ctx(`Bearer ${jwt.sign({ sub: userId, sid: '-'.repeat(36) })}`).context),
+    ).rejects.toThrow('Tu sesión expiró');
+    await expect(
+      guard.canActivate(
+        ctx(`Bearer ${jwt.sign({ sub: userId, sid }, { algorithm: 'HS384' })}`).context,
+      ),
+    ).rejects.toThrow();
+    db.authSession.findUnique.mockRejectedValueOnce(new Error('database offline'));
+    await expect(
+      guard.canActivate(ctx(`Bearer ${jwt.sign({ sub: userId, sid })}`).context),
+    ).rejects.toThrow('database offline');
+  });
   it('asocia el usuario de un token válido', async () => {
     const jwt = new JwtService({ secret: 'test-secret' }),
-      guard = new JwtGuard({ getAllAndOverride: () => false } as any, jwt),
-      c = ctx(`Bearer ${jwt.sign({ sub: 'user' })}`);
+      guard = new JwtGuard({ getAllAndOverride: () => false } as any, jwt, {
+        authSession: {
+          findUnique: jest.fn().mockResolvedValue({
+            userId: userId,
+            expiresAt: new Date(Date.now() + 60000),
+            user: { id: userId, email: 'a@b.cl' },
+          }),
+        },
+      } as any),
+      c = ctx(`Bearer ${jwt.sign({ sub: userId, sid })}`);
     expect(await guard.canActivate(c.context)).toBe(true);
-    expect(c.req.user.sub).toBe('user');
+    expect(c.req.user.sub).toBe(userId);
   });
 });

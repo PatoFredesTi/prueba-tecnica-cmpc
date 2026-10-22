@@ -12,16 +12,18 @@ import {
   Res,
   Header,
   ForbiddenException,
+  UseGuards,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { ApiHeader, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsString, MaxLength, MinLength, isUUID } from 'class-validator';
 import { compare, hashSync } from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthRequest } from '../common/http';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { CookieOptions, Response } from 'express';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 const SESSION_COOKIE = 'cmpc_session';
 const SESSION_DURATION = 7 * 24 * 60 * 60 * 1000;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -61,7 +63,8 @@ export class AuthService {
       });
       throw new UnauthorizedException('Correo o contraseña incorrectos');
     }
-    const result = await this.issueAccess(user);
+    const sessionId = randomUUID();
+    const result = await this.issueAccess(user, sessionId);
     const refreshToken = randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + SESSION_DURATION);
     await this.prisma.$transaction(async (tx) => {
@@ -71,7 +74,7 @@ export class AuthService {
         where: { userId: user.id, expiresAt: { lte: new Date() } },
       });
       await tx.authSession.create({
-        data: { tokenHash: digest(refreshToken), userId: user.id, expiresAt },
+        data: { id: sessionId, tokenHash: digest(refreshToken), userId: user.id, expiresAt },
       });
       await tx.auditLog.create({
         data: {
@@ -85,9 +88,10 @@ export class AuthService {
     });
     return { ...result, refreshToken, expiresAt };
   }
-  private async issueAccess(user: { id: string; email: string; role: string }) {
+  private async issueAccess(user: { id: string; email: string; role: string }, sessionId: string) {
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
+      sid: sessionId,
       email: user.email,
       role: user.role,
     });
@@ -101,7 +105,7 @@ export class AuthService {
     });
     if (!session || session.expiresAt <= new Date())
       throw new UnauthorizedException('Tu sesión expiró. Inicia sesión nuevamente');
-    return this.issueAccess(session.user);
+    return this.issueAccess(session.user, session.id);
   }
   async logout(refreshToken?: string) {
     if (refreshToken)
@@ -114,6 +118,7 @@ export class JwtGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
     private jwt: JwtService,
+    private prisma: PrismaService,
   ) {}
   async canActivate(context: ExecutionContext) {
     if (this.reflector.getAllAndOverride('public', [context.getHandler(), context.getClass()]))
@@ -121,17 +126,33 @@ export class JwtGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<AuthRequest>();
     const match = /^Bearer (\S+)$/.exec(req.headers.authorization || '');
     if (!match) throw new UnauthorizedException('Inicia sesión para continuar');
+    let claims: { sub?: string; sid?: string };
     try {
-      req.user = await this.jwt.verifyAsync(match[1]);
-      if (!req.user.sub) throw new Error();
+      claims = await this.jwt.verifyAsync(match[1], { algorithms: ['HS256'] });
+      if (
+        typeof claims.sub !== 'string' ||
+        typeof claims.sid !== 'string' ||
+        !isUUID(claims.sub) ||
+        !isUUID(claims.sid)
+      )
+        throw new Error();
     } catch {
       throw new UnauthorizedException('Tu sesión expiró. Inicia sesión nuevamente');
     }
+    // Database failures propagate as server errors; they never grant access.
+    const session = await this.prisma.authSession.findUnique({
+      where: { id: claims.sid },
+      include: { user: true },
+    });
+    if (!session || session.userId !== claims.sub || session.expiresAt <= new Date())
+      throw new UnauthorizedException('Tu sesión expiró. Inicia sesión nuevamente');
+    req.user = { sub: session.user.id, email: session.user.email };
     return true;
   }
 }
 @ApiTags('Autenticación')
 @ApiHeader({ name: 'X-Session-Request', required: true, schema: { type: 'string', enum: ['1'] } })
+@UseGuards(ThrottlerGuard)
 @Controller('auth')
 export class AuthController {
   constructor(private auth: AuthService) {}
@@ -155,6 +176,7 @@ export class AuthController {
   }
   @Public()
   @ApiOperation({ summary: 'Recuperar JWT usando la cookie HttpOnly cmpc_session (7 días)' })
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
   @Post('refresh')
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')
@@ -169,6 +191,7 @@ export class AuthController {
   }
   @Public()
   @ApiOperation({ summary: 'Revocar sesión persistente y eliminar su cookie' })
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @Post('logout')
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')

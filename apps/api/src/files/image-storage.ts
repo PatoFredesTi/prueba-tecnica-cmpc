@@ -1,11 +1,12 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { mkdir, writeFile, unlink } from 'node:fs/promises';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { mkdir, writeFile, unlink, readFile } from 'node:fs/promises';
 import { join, basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 export abstract class ImageStoragePort {
   abstract save(file: Express.Multer.File): Promise<string>;
   abstract remove(url: string): Promise<void>;
+  abstract read(filename: string): Promise<Buffer>;
 }
 @Injectable()
 export class LocalImageStorage extends ImageStoragePort {
@@ -33,7 +34,18 @@ export class LocalImageStorage extends ImageStoragePort {
     await mkdir(directory, { recursive: true });
     const filename = randomUUID() + '.webp';
     await writeFile(join(directory, filename), buffer);
-    return '/uploads/' + filename;
+    return '/api/v1/files/' + filename;
+  }
+  async read(filename: string) {
+    if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.webp$/i.test(filename))
+      throw new NotFoundException('Portada no encontrada');
+    try {
+      return await readFile(join(process.env.UPLOAD_DIR || './uploads', filename));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+        throw new NotFoundException('Portada no encontrada');
+      throw error;
+    }
   }
   async remove(url: string) {
     try {

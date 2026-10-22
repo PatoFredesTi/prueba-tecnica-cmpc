@@ -59,3 +59,9 @@ export function validateImage(file: File): string | undefined {
     return 'Usa una imagen JPEG, PNG o WebP.';
   if (file.size > 5 * 1024 * 1024) return 'La imagen debe pesar como máximo 5 MB.';
 }
+
+export async function fetchCover(url: string, signal: AbortSignal) {
+  const match = /^\/(?:uploads|api\/v1\/files)\/([a-f0-9-]{36}\.webp)$/i.exec(url);
+  if (!match) throw new ApiError('Ruta de portada inválida', 400);
+  return (await response(`/files/${match[1]}`, { signal })).blob();
+}

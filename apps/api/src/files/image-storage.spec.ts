@@ -23,8 +23,9 @@ describe('LocalImageStorage', () => {
       .png()
       .toBuffer();
     const url = await storage.save({ buffer, size: buffer.length, mimetype: 'image/png' } as any);
-    expect(url).toMatch(/^\/uploads\/[\w-]+\.webp$/);
+    expect(url).toMatch(/^\/api\/v1\/files\/[\w-]+\.webp$/);
     expect(await readdir(directory)).toHaveLength(1);
+    expect((await sharp(await storage.read(url.split('/').pop()!)).metadata()).format).toBe('webp');
     await storage.remove(url);
     await storage.remove(url);
     expect(await readdir(directory)).toHaveLength(0);

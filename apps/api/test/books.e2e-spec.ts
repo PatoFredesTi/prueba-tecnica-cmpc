@@ -6,11 +6,12 @@ import { AppModule } from '../src/app.module';
 import { setup } from '../src/setup';
 import { hash } from 'bcryptjs';
 import request from 'supertest';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { JwtService } from '@nestjs/jwt';
 import { BooksService } from '../src/books/books.service';
 const suite = process.env.DATABASE_URL ? describe : describe.skip;
 suite('Integración real · PostgreSQL + HTTP', () => {
@@ -31,7 +32,9 @@ suite('Integración real · PostgreSQL + HTTP', () => {
     isAvailable: true,
   };
   beforeAll(async () => {
-    process.env.JWT_SECRET = 'integration-test-only-secret-at-least-32-characters';
+    process.env.JWT_SECRET = randomBytes(32).toString('hex');
+    process.env.TRUST_PROXY_HOPS = '0';
+    process.env.APP_ENV = 'local';
     uploads = await mkdtemp(join(tmpdir(), 'cmpc-integration-'));
     process.env.UPLOAD_DIR = uploads;
     const module = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -107,6 +110,10 @@ suite('Integración real · PostgreSQL + HTTP', () => {
       .expect(200);
     expect(logout.headers['set-cookie'][0]).toContain('Expires=Thu, 01 Jan 1970');
     await request(app.getHttpServer())
+      .get('/api/v1/books')
+      .auth(login.body.data.accessToken, { type: 'bearer' })
+      .expect(401);
+    await request(app.getHttpServer())
       .post('/api/v1/auth/refresh')
       .set('X-Session-Request', '1')
       .set('Cookie', cookie)
@@ -136,7 +143,14 @@ suite('Integración real · PostgreSQL + HTTP', () => {
       .set('X-Session-Request', '1')
       .send({ email, password: 'Integration123!' })
       .expect(200);
-    await db.authSession.updateMany({ where: { userId }, data: { expiresAt: new Date(0) } });
+    await db.authSession.updateMany({
+      where: {
+        tokenHash: createHash('sha256')
+          .update(login.headers['set-cookie'][0].split(';')[0].split('=')[1])
+          .digest('hex'),
+      },
+      data: { expiresAt: new Date(0) },
+    });
     await request(app.getHttpServer())
       .post('/api/v1/auth/refresh')
       .set('X-Session-Request', '1')
@@ -237,6 +251,13 @@ suite('Integración real · PostgreSQL + HTTP', () => {
       .attach('file', image, { filename: 'cover.png', contentType: 'image/png' })
       .expect(201);
     expect(r.body.data.imageUrl).toMatch(/\.webp$/);
+    await request(app.getHttpServer()).get(r.body.data.imageUrl).expect(401);
+    const imageResponse = await request(app.getHttpServer())
+      .get(r.body.data.imageUrl)
+      .auth(token, { type: 'bearer' })
+      .expect(200);
+    expect(imageResponse.headers['content-type']).toBe('image/webp');
+    expect(imageResponse.headers['cache-control']).toContain('no-store');
   });
   it('exporta CSV filtrado sin envelope ni límite de página', async () => {
     const r = await request(app.getHttpServer())
@@ -281,5 +302,54 @@ suite('Integración real · PostgreSQL + HTTP', () => {
       .expect(200);
     expect(csv.text).not.toContain(prefix);
     expect(await db.auditLog.count({ where: { entityId: id, action: 'DELETE' } })).toBe(1);
+  });
+  it('rechaza JWT fabricados, algoritmo incorrecto, audiencia incorrecta y sesiones inexistentes', async () => {
+    const jwt = app.get(JwtService);
+    for (const forged of [
+      jwt.sign({ sub: userId }),
+      jwt.sign({ sub: userId, sid: randomUUID() }),
+      jwt.sign({ sub: userId, sid: randomUUID() }, { algorithm: 'HS384' }),
+      jwt.sign({ sub: userId, sid: randomUUID() }, { audience: 'another-app' }),
+      new JwtService({ secret: 'local-demo-change-this-secret-at-least-32-chars' }).sign(
+        { sub: userId, sid: randomUUID() },
+        { issuer: 'cmpc-libros', audience: 'cmpc-web' },
+      ),
+    ])
+      await request(app.getHttpServer())
+        .get('/api/v1/books')
+        .auth(forged, { type: 'bearer' })
+        .expect(401);
+  });
+  it('no permite descargar la portada de un libro retirado ni acceder al servidor de archivos antiguo', async () => {
+    const book = await db.book.findUniqueOrThrow({ where: { id } });
+    await request(app.getHttpServer())
+      .get(book.imageUrl!)
+      .auth(token, { type: 'bearer' })
+      .expect(404);
+    await request(app.getHttpServer())
+      .get('/uploads/' + book.imageUrl!.split('/').pop())
+      .expect(404);
+    await request(app.getHttpServer())
+      .get('/api/v1/files/not-a-file.webp')
+      .auth(token, { type: 'bearer' })
+      .expect(404);
+  });
+  it('bloquea exceso de login con 429 y no permite evadirlo falsificando X-Forwarded-For', async () => {
+    let blocked = false;
+    for (let i = 0; i < 11; i++) {
+      const r = await request(app.getHttpServer())
+        .post('/api/v1/auth/login')
+        .set('X-Session-Request', '1')
+        .set('X-Forwarded-For', `203.0.113.${i + 1}`)
+        .send({ email, password: 'incorrect-password' });
+      expect([401, 429]).toContain(r.status);
+      if (r.status === 429) {
+        blocked = true;
+        expect(Number(r.headers['retry-after'])).toBeGreaterThan(0);
+        expect(r.body.code).toBe('TOO_MANY_REQUESTS');
+        expect(await db.auditLog.count({ where: { requestId: r.body.requestId } })).toBe(0);
+      }
+    }
+    expect(blocked).toBe(true);
   });
 });

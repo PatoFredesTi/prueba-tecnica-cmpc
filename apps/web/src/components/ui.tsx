@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { fetchCover } from '../lib/api';
 import { BookOpen, AlertCircle, LoaderCircle, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { Book } from '../lib/types';
@@ -72,11 +74,31 @@ export function Cover({
   book: Pick<Book, 'title' | 'author' | 'imageUrl'>;
   large?: boolean;
 }) {
+  const [image, setImage] = useState<{ source: string; url: string }>();
+  useEffect(() => {
+    if (!book.imageUrl) return;
+    const source = book.imageUrl;
+    const controller = new AbortController();
+    let objectUrl: string | undefined;
+    void fetchCover(source, controller.signal)
+      .then((blob) => {
+        if (controller.signal.aborted) return;
+        objectUrl = URL.createObjectURL(blob);
+        setImage({ source, url: objectUrl });
+      })
+      .catch(() => {
+        /* Keep the placeholder when a cover cannot be loaded. */
+      });
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [book.imageUrl]);
   const color = Array.from(book.title).reduce((acc, c) => acc + c.charCodeAt(0), 0) % 5;
-  return book.imageUrl ? (
+  return image && image.source === book.imageUrl ? (
     <img
       className={`cover cover-image ${large ? 'large' : ''}`}
-      src={book.imageUrl}
+      src={image.url}
       alt={`Portada de ${book.title}`}
     />
   ) : (

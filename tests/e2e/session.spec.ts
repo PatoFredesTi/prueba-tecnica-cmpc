@@ -7,7 +7,13 @@ test('F5 conserva sesión, ruta y filtros; logout impide recuperarla', async ({ 
   await page.goto('/books');
   await page.getByLabel('Correo electrónico').fill(email);
   await page.getByLabel('Contraseña', { exact: true }).fill(password);
+  const loggedIn = page.waitForResponse(
+    (r) => r.url().endsWith('/api/v1/auth/login') && r.request().method() === 'POST',
+  );
   await page.getByRole('button', { name: 'Iniciar sesión' }).click();
+  const {
+    data: { accessToken },
+  } = await (await loggedIn).json();
   await expect(page.getByRole('heading', { name: /Catálogo de libros/ })).toBeVisible();
   await expect(page.getByRole('table')).toBeVisible();
   await page.getByLabel('Buscar libros').fill('casa');
@@ -34,6 +40,10 @@ test('F5 conserva sesión, ruta y filtros; logout impide recuperarla', async ({ 
   await page.getByRole('button', { name: 'Cerrar sesión' }).click();
   await expect(page.getByRole('heading', { name: 'Qué bueno verte.' })).toBeVisible();
   expect((await context.cookies()).find((item) => item.name === 'cmpc_session')).toBeUndefined();
+  const replay = await page.request.get('/api/v1/books', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  expect(replay.status()).toBe(401);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Qué bueno verte.' })).toBeVisible();
   await tab.reload();

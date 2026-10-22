@@ -6,10 +6,10 @@ Verificación local del 22 de octubre de 2026. Resumen legible por máquinas: [v
 
 | Suite                                       | Resultado                                          |
 | ------------------------------------------- | -------------------------------------------------- |
-| API — Jest                                  | 66 pruebas aprobadas, 5 suites                     |
-| Web — Vitest + Testing Library              | 41 pruebas aprobadas, 5 suites                     |
-| Integración — NestJS HTTP + PostgreSQL real | 13 pruebas aprobadas                               |
-| Navegador — Playwright + Google Chrome      | 2 flujos aprobados                                 |
+| API — Jest                                  | 84 pruebas aprobadas, 7 suites                     |
+| Web — Vitest + Testing Library              | 42 pruebas aprobadas, 5 suites                     |
+| Integración — NestJS HTTP + PostgreSQL real | 16 pruebas aprobadas                               |
+| Navegador — Playwright + Google Chrome      | 3 flujos aprobados                                 |
 | Compilación TypeScript y Vite               | Aprobada                                           |
 | ESLint                                      | Aprobado                                           |
 | Auditoría npm                               | 0 vulnerabilidades reportadas                      |
@@ -21,8 +21,8 @@ Las pruebas del navegador comprobaron login, catálogo, búsqueda, filtros, orde
 
 | Aplicación | Sentencias |  Ramas | Funciones | Líneas |
 | ---------- | ---------: | -----: | --------: | -----: |
-| API        |      96.4% | 93.27% |     97.1% | 96.23% |
-| Web        |     95.66% | 91.72% |    94.17% | 97.37% |
+| API        |     95.29% | 95.32% |    96.15% | 94.97% |
+| Web        |     95.61% |  91.3% |    93.51% | 97.51% |
 
 Se exige un umbral global del 80% en las cuatro métricas de cada aplicación. La cifra no implica que todos los archivos superen individualmente 80%.
 
@@ -67,7 +67,7 @@ En esta máquina se usó Google Chrome instalado con `PLAYWRIGHT_CHANNEL=chrome`
 
 ## Alcance pendiente de verificación
 
-No se ejecutaron pruebas de carga, navegadores Safari/Firefox, auditoría WCAG completa ni validación en un entorno público con TLS. El workflow de GitHub Actions se entrega configurado pero no se ejecutó remotamente porque no se creó un repositorio remoto.
+No se ejecutaron pruebas de carga, navegadores Safari/Firefox, auditoría WCAG completa ni validación en un entorno público con TLS. El workflow de GitHub Actions incorpora auditoría npm y un job Docker/Chromium, pero esta revisión no lo ejecutó remotamente.
 
 ## Capturas
 
@@ -78,3 +78,11 @@ No se ejecutaron pruebas de carga, navegadores Safari/Firefox, auditoría WCAG c
 ## Persistencia comprobada
 
 Se recrearon los tres contenedores con `docker compose down` y `docker compose up -d --build`, sin eliminar volúmenes. Antes y después se conservaron 25 registros (24 activos, uno retirado por E2E) y una portada física. El seed no reactivó el libro retirado. Frontend, Swagger, OpenAPI, health y la imagen persistida devolvieron HTTP 200 después del reinicio. Las ejecuciones posteriores de E2E pueden agregar registros retirados y sus imágenes de prueba; no alteran los 24 libros activos de demostración.
+
+## Verificación de seguridad posterior
+
+Se comprobaron revocación de JWT después de logout, rechazo de tokens firmados con la clave publicada anterior, algoritmo/audiencia/sesión incorrectos, portadas privadas (incluido 404 al retirar el libro), límite de login 429 y cabeceras CSP del frontend. El flujo completo en Chrome no registró infracciones CSP.
+
+Un contenedor temporal con APP_ENV=production y configuración HTTPS/Secure confirmó que /api/docs y /api/docs-json devuelven 404 incluso con SWAGGER_ENABLED=true. Esto valida el perfil de configuración, no un despliegue TLS público.
+
+La rotación local se verificó contra credenciales persistidas: el login con la contraseña anterior devuelve 401 y PostgreSQL rechaza la contraseña anterior del rol. La generación inicial de secretos se comprobó en un directorio temporal, con valores independientes, permisos 0600 y conservación del archivo en una segunda ejecución. No se encontraron las claves nuevas revisadas entre archivos versionados ni assets servidos. Detalle y límites: [security-review.md](security-review.md).
