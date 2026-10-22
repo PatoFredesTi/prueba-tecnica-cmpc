@@ -1,0 +1,50 @@
+{
+  "name": "@cmpc/api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm run build && concurrently -k \"tsc -p tsconfig.build.json --watch --preserveWatchOutput\" \"node --watch dist/main.js\"",
+    "build": "prisma generate && tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "node --env-file-if-exists=../../.env ../../node_modules/prisma/build/index.js migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "test": "jest --runInBand",
+    "test:cov": "jest --runInBand --coverage",
+    "test:integration": "node --env-file-if-exists=../../.env ../../node_modules/jest/bin/jest.js --config test/jest-integration.json --runInBand"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.11",
+    "@nestjs/core": "^11.0.11",
+    "@nestjs/jwt": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.11",
+    "@nestjs/swagger": "^11.0.6",
+    "@prisma/client": "^6.5.0",
+    "bcryptjs": "^3.0.2",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "dotenv": "^16.4.7",
+    "helmet": "^8.0.0",
+    "multer": "^2.0.2",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.0.11",
+    "@types/express": "^5.0.0",
+    "@types/jest": "^30.0.0",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^22.13.10",
+    "@types/supertest": "^6.0.2",
+    "jest": "^30.5.2",
+    "prisma": "^6.5.0",
+    "supertest": "^7.0.0",
+    "ts-jest": "^29.2.6",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}

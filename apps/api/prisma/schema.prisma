@@ -1,0 +1,77 @@
+generator client {
+ provider = "prisma-client-js"
+}
+datasource db {
+ provider = "postgresql"
+ url = env("DATABASE_URL")
+}
+model User {
+ id String @id @default(uuid()) @db.Uuid
+ email String @unique
+ passwordHash String
+ role String @default("ADMIN")
+ createdAt DateTime @default(now())
+ auditLogs AuditLog[]
+ sessions AuthSession[]
+}
+model Author {
+ id String @id @default(uuid()) @db.Uuid
+ name String @db.VarChar(120)
+ normalizedName String @unique @db.VarChar(120)
+ books Book[]
+}
+model Publisher {
+ id String @id @default(uuid()) @db.Uuid
+ name String @db.VarChar(120)
+ normalizedName String @unique @db.VarChar(120)
+ books Book[]
+}
+model Genre {
+ id String @id @default(uuid()) @db.Uuid
+ name String @db.VarChar(120)
+ normalizedName String @unique @db.VarChar(120)
+ books Book[]
+}
+model Book {
+ id String @id @default(uuid()) @db.Uuid
+ title String @db.VarChar(200)
+ authorId String @db.Uuid
+ publisherId String @db.Uuid
+ genreId String @db.Uuid
+ author Author @relation(fields: [authorId], references: [id])
+ publisher Publisher @relation(fields: [publisherId], references: [id])
+ genre Genre @relation(fields: [genreId], references: [id])
+ price Decimal @db.Decimal(12,2)
+ isAvailable Boolean @default(true)
+ imageUrl String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ deletedAt DateTime?
+ @@index([deletedAt, genreId])
+ @@index([deletedAt, publisherId])
+ @@index([deletedAt, authorId])
+ @@index([deletedAt, isAvailable])
+ @@index([deletedAt, price])
+}
+model AuditLog {
+ id String @id @default(uuid()) @db.Uuid
+ actorId String? @db.Uuid
+ actor User? @relation(fields: [actorId], references: [id])
+ action String
+ entityType String
+ entityId String?
+ before Json?
+ after Json?
+ requestId String?
+ createdAt DateTime @default(now())
+ @@index([createdAt])
+}
+
+model AuthSession {
+ tokenHash String @id @db.Char(64)
+ userId String @db.Uuid
+ user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+ expiresAt DateTime
+ @@index([userId])
+ @@index([expiresAt])
+}

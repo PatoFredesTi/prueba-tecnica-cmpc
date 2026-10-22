@@ -1,0 +1,98 @@
+{
+  "date": "2026-10-22",
+  "unitTests": {
+    "api": 66,
+    "web": 41
+  },
+  "integrationTests": 13,
+  "browserTests": 2,
+  "coverage": {
+    "api": {
+      "lines": {
+        "total": 319,
+        "covered": 307,
+        "skipped": 0,
+        "pct": 96.23
+      },
+      "statements": {
+        "total": 362,
+        "covered": 349,
+        "skipped": 0,
+        "pct": 96.4
+      },
+      "functions": {
+        "total": 69,
+        "covered": 67,
+        "skipped": 0,
+        "pct": 97.1
+      },
+      "branches": {
+        "total": 119,
+        "covered": 111,
+        "skipped": 0,
+        "pct": 93.27
+      },
+      "branchesTrue": {
+        "total": 0,
+        "covered": 0,
+        "skipped": 0,
+        "pct": 100
+      }
+    },
+    "web": {
+      "lines": {
+        "total": 267,
+        "covered": 260,
+        "skipped": 0,
+        "pct": 97.37
+      },
+      "statements": {
+        "total": 300,
+        "covered": 287,
+        "skipped": 0,
+        "pct": 95.66
+      },
+      "functions": {
+        "total": 103,
+        "covered": 97,
+        "skipped": 0,
+        "pct": 94.17
+      },
+      "branches": {
+        "total": 266,
+        "covered": 244,
+        "skipped": 0,
+        "pct": 91.72
+      },
+      "branchesTrue": {
+        "total": 0,
+        "covered": 0,
+        "skipped": 0,
+        "pct": 100
+      }
+    }
+  },
+  "coverageThreshold": 80,
+  "dependencyAudit": {
+    "vulnerabilities": 0
+  },
+  "scope": "local; ver docs/testing.md para evidencia y exclusiones",
+  "persistenceCheck": {
+    "before": {
+      "totalBooks": 25,
+      "activeBooks": 24,
+      "images": 1
+    },
+    "after": {
+      "totalBooks": 25,
+      "activeBooks": 24,
+      "images": 1
+    }
+  },
+  "sessionReloadCheck": {
+    "developmentOrigin": "http://localhost:5173",
+    "dockerOrigin": "http://localhost:8080",
+    "result": "passed",
+    "cases": ["reload retains session and filters", "multiple tabs", "logout prevents restoration"]
+  }
+}

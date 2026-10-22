@@ -1,0 +1,32 @@
+name: Verificación
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cmpc
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: cmpc_test
+        ports: ['55439:5432']
+        options: >-
+          --health-cmd "pg_isready -U cmpc -d cmpc_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://cmpc:ci-only-password@localhost:55439/cmpc_test?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build
+      - run: npm run test:cov
+      - run: npm run db:migrate
+      - run: npm run test:integration

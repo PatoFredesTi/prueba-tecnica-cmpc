@@ -1,0 +1,36 @@
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Build
+dist/
+build/
+.next/
+coverage/
+
+# Logs
+*.log
+
+# Operating system
+.DS_Store
+
+# Test and Reports
+test-results/
+playwright-report/
+
+# Editor
+.vscode/
+.idea/
+
+# TypeScript
+*.tsbuildinfo
+
+# Uploads
+uploads/
